@@ -1,0 +1,284 @@
+================================================================
+  EXPLICACIÓN DEL CÓDIGO — MONITOR CARDIACO IoT
+  ESP32 + MAX30102 + OLED SSD1306 + Servidor Web
+  Arath Reyes Gonzalez — UABC FCITEC 2026-1
+================================================================
+
+
+----------------------------------------------------------------
+1. LAS LIBRERÍAS
+----------------------------------------------------------------
+
+Las librerías son bloques de código ya escritos por otros
+desarrolladores que se agregan al proyecto para no tener que
+programar todo desde cero. En Arduino se agregan con la
+instrucción #include al inicio del código.
+
+Las más importantes en este proyecto son:
+
+  - Wire.h
+    Permite la comunicación I2C entre el ESP32 y los
+    dispositivos conectados (pantalla OLED y sensor MAX30102).
+    Sin esta librería, el ESP32 no podría hablar con ninguno
+    de los dos.
+
+  - WiFi.h y WebServer.h
+    Permiten que el ESP32 cree su propia red WiFi y funcione
+    como un servidor web al que cualquier navegador puede
+    conectarse. Es lo que hace posible ver la página en el
+    celular o computadora.
+
+  - MAX30105.h / heartRate.h / spo2_algorithm.h
+    Son tres librerías del fabricante del sensor. La primera
+    controla el hardware del sensor, la segunda detecta
+    latidos del corazón y la tercera calcula el porcentaje
+    de oxígeno en sangre (SpO2).
+
+  - Adafruit_GFX.h y Adafruit_SSD1306.h
+    Controlan la pantalla OLED. La primera provee las
+    funciones de dibujo (líneas, rectángulos, texto) y la
+    segunda es el driver específico del modelo SSD1306.
+
+  - ArduinoJson.h
+    Permite crear y leer archivos JSON, que es el formato
+    usado para enviar los datos del sensor al navegador web.
+
+
+----------------------------------------------------------------
+2. LA MÁQUINA DE ESTADOS
+----------------------------------------------------------------
+
+La máquina de estados es el corazón del programa. En lugar
+de ejecutar el código de forma lineal de arriba hacia abajo,
+el ESP32 siempre se encuentra en uno de cuatro estados
+posibles, y en cada estado solo realiza las acciones que
+le corresponden.
+
+Esto se logra con una estructura switch-case dentro del
+loop(), que revisa en qué estado está el sistema y ejecuta
+el bloque de código correspondiente.
+
+Los cuatro estados son:
+
+  ESTADO 0 — ESPERANDO
+    El ESP32 está en reposo mostrando el mensaje de inicio
+    en la pantalla OLED. En cada ciclo lee el sensor y revisa
+    si el valor infrarrojo supera el umbral (20,000), lo que
+    indica que hay un dedo presente. Cuando detecta el dedo,
+    reinicia todos los contadores y avanza al siguiente estado.
+
+  ESTADO 1 — MIDIENDO
+    El ESP32 mide activamente durante 60 segundos. En cada
+    ciclo detecta latidos, calcula el BPM, actualiza el SpO2
+    y refresca la pantalla OLED. Si el dedo se retira antes
+    de terminar, regresa al estado ESPERANDO. Al cumplirse
+    los 60 segundos avanza al siguiente estado.
+
+  ESTADO 2 — MOSTRANDO_RESULTADO
+    Muestra en la pantalla OLED el resumen de la medición:
+    BPM promedio, SpO2, y BPM mínimo registrado. Permanece
+    aquí 4 segundos y luego avanza automáticamente.
+
+  ESTADO 3 — SUBIENDO
+    En la versión con Access Point, muestra en pantalla la
+    dirección IP donde el usuario puede ver los resultados.
+    Guarda los datos finales para que la página web los
+    muestre. Luego regresa al estado ESPERANDO.
+
+El flujo siempre sigue esta dirección:
+
+  ESPERANDO → MIDIENDO → MOSTRANDO_RESULTADO → SUBIENDO → ESPERANDO
+
+
+----------------------------------------------------------------
+3. EL SETUP() Y EL LOOP()
+----------------------------------------------------------------
+
+Todo programa de Arduino tiene obligatoriamente dos funciones
+principales que definen cómo se ejecuta el código:
+
+  setup()
+    Se ejecuta una única vez cuando el ESP32 se enciende o
+    se reinicia. Aquí se inicializan todos los componentes
+    del sistema en orden:
+
+      1. Se inicia la comunicación serial para depuración
+      2. Se inicia el bus I2C en los pines 21 y 22
+      3. Se inicializa la pantalla OLED
+      4. Se crea la red WiFi en modo Access Point
+      5. Se registran las rutas del servidor web
+      6. Se inicializa el sensor MAX30102 con alta sensibilidad
+      7. Se realiza la calibración inicial con el dedo
+
+    Si cualquiera de estos pasos falla (por ejemplo, el sensor
+    no está conectado), el programa se detiene con un bucle
+    infinito y muestra el error en pantalla.
+
+  loop()
+    Se ejecuta de forma continua e infinita después del setup().
+    Cada ciclo del loop realiza tres cosas:
+
+      1. Atiende las peticiones del servidor web
+         (server.handleClient)
+      2. Lee el valor actual del sensor
+      3. Ejecuta el código del estado actual de la máquina
+         de estados
+
+    La velocidad del loop depende del sensor: el programa
+    espera a que haya una nueva muestra disponible antes de
+    continuar, lo que sincroniza todo el sistema con la
+    frecuencia de muestreo configurada (400 Hz).
+
+
+----------------------------------------------------------------
+4. CÓMO SE DETECTA UN LATIDO Y SE CALCULA EL BPM
+----------------------------------------------------------------
+
+La detección de latidos se basa en analizar los cambios en
+la señal infrarroja que capta el sensor. Cuando el corazón
+late, bombea sangre hacia el dedo, lo que cambia la cantidad
+de luz infrarroja que regresa al sensor. Cada pico en esa
+señal corresponde a un latido.
+
+La función checkForBeat(irValue) de la librería heartRate
+analiza la señal en tiempo real y devuelve true en el momento
+exacto en que detecta un latido.
+
+El cálculo del BPM funciona así:
+
+  PASO 1 — Registrar el tiempo del latido
+    Cada vez que checkForBeat devuelve true, se guarda el
+    tiempo actual con millis(), que devuelve los milisegundos
+    transcurridos desde que encendió el ESP32.
+
+  PASO 2 — Calcular el intervalo entre latidos
+    delta = millis() - tiempo_del_latido_anterior
+
+    Por ejemplo, si pasaron 750 milisegundos entre dos
+    latidos, delta = 750.
+
+  PASO 3 — Convertir a BPM con la fórmula
+    BPM = 60,000 / delta
+
+    Usando el ejemplo: 60,000 / 750 = 80 BPM
+
+    La lógica es: si entre latido y latido pasan 750 ms,
+    en un minuto completo (60,000 ms) cabrían exactamente
+    80 latidos.
+
+  PASO 4 — Promediar los últimos 4 valores
+    Para evitar lecturas erráticas por movimiento del dedo,
+    se guarda un historial de los últimos 4 BPM calculados
+    en un arreglo circular. El BPM que se muestra en pantalla
+    y en la web es el promedio de esos 4 valores, lo que
+    suaviza la lectura y la hace más estable.
+
+  PASO 5 — Filtrar valores fuera de rango
+    Solo se aceptan BPM entre 30 y 200, y solo se procesan
+    deltas entre 250 y 1800 milisegundos. Cualquier valor
+    fuera de ese rango se descarta para evitar errores por
+    ruido en la señal.
+
+
+----------------------------------------------------------------
+5. EL SERVIDOR WEB DENTRO DEL ESP32
+----------------------------------------------------------------
+
+El ESP32 no solo mide el sensor: también funciona como un
+servidor web completo. Esto significa que cualquier
+dispositivo conectado a su red WiFi puede abrir un navegador,
+escribir la dirección 192.168.4.1 y ver una página web con
+los datos en tiempo real.
+
+El servidor se configura con la librería WebServer y funciona
+de la siguiente manera:
+
+  Registro de rutas
+    Antes de iniciar el servidor, se le indica qué función
+    ejecutar cuando alguien pida cada dirección:
+
+      server.on("/",      handleRoot)
+      server.on("/datos", handleDatos)
+
+    Esto es igual a cómo funcionan las páginas web normales:
+    cada URL tiene un contenido diferente.
+
+  Ruta "/" — La página principal
+    Cuando el navegador entra a 192.168.4.1, el ESP32 envía
+    el código HTML completo de la página. Este HTML incluye
+    el CSS para el diseño visual y el JavaScript que se
+    encargará de pedir los datos automáticamente.
+
+  Ruta "/datos" — Los datos en tiempo real
+    Cuando el JavaScript de la página pide los datos, el
+    ESP32 responde con un JSON que contiene toda la
+    información actual del sensor:
+
+      {
+        "bpm": 75,
+        "bpm_actual": 78,
+        "spo2": 98,
+        "bpm_min": 68,
+        "bpm_max": 82,
+        "fecha": "00:05:32",
+        "estado": 1,
+        "hay_datos": true
+      }
+
+  Atención de peticiones en el loop
+    La línea server.handleClient() al inicio del loop() es
+    fundamental. Sin ella, el servidor nunca respondería a
+    ninguna petición. Esta instrucción revisa si hay alguna
+    petición pendiente y la procesa antes de continuar con
+    la medición del sensor.
+
+
+----------------------------------------------------------------
+6. EL JSON COMO PUENTE ENTRE EL ESP32 Y EL NAVEGADOR
+----------------------------------------------------------------
+
+JSON (JavaScript Object Notation) es un formato de texto
+simple para organizar y transportar datos. Es el estándar
+más usado en internet para que dos sistemas intercambien
+información, y en este proyecto es el puente entre el ESP32
+y la página web.
+
+¿Por qué JSON y no HTML directamente?
+
+  La página web se envía una sola vez cuando el usuario
+  la abre. Si cada vez que cambia el BPM se enviara toda
+  la página de nuevo, sería lento y la pantalla parpadearia
+  constantemente. En cambio, cada 1.5 segundos el JavaScript
+  pide solo los datos (el JSON, que pesa muy poco) y
+  actualiza únicamente los números que cambiaron, sin
+  recargar nada.
+
+Cómo funciona el ciclo completo:
+
+  PASO 1 — El ESP32 mide el sensor constantemente y guarda
+           los valores en variables globales (beatAvg, spo2Value,
+           bpmActual, etc.)
+
+  PASO 2 — Cada vez que el navegador pide /datos, el ESP32
+           toma esas variables, las empaqueta en un JSON
+           y lo envía como respuesta.
+
+  PASO 3 — El JavaScript de la página recibe el JSON,
+           extrae cada valor y lo coloca en el elemento
+           HTML correspondiente (tarjeta de BPM, gráfica,
+           indicador de SpO2, etc.)
+
+  PASO 4 — La gráfica agrega el nuevo valor de bpm_actual
+           al historial de 40 puntos y se redibuja
+           automáticamente usando el Canvas de HTML5.
+
+  PASO 5 — El temporizador espera 1.5 segundos y repite
+           desde el PASO 2 de forma indefinida.
+
+Este esquema se llama polling y es la forma más sencilla
+de mantener una página actualizada sin necesidad de una
+conexión permanente entre el navegador y el servidor.
+
+================================================================
+  FIN DEL DOCUMENTO
+================================================================

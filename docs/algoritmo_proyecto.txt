@@ -1,0 +1,288 @@
+================================================================
+  ALGORITMO DEL PROYECTO — MONITOR CARDIACO IoT
+  ESP32 + MAX30102 + OLED SSD1306 + Servidor Web
+  Arath Reyes Gonzalez — UABC FCITEC 2026-1
+================================================================
+
+
+----------------------------------------------------------------
+PARTE 1 — PANTALLA OLED (SSD1306)
+----------------------------------------------------------------
+
+¿Qué es?
+  La pantalla OLED SSD1306 es una pantalla pequeña de 128x64
+  píxeles que se comunica con el ESP32 mediante el protocolo
+  I2C usando solo 2 cables: SDA (datos) y SCL (reloj).
+
+ALGORITMO DE USO:
+
+  PASO 1 — Inicializar la librería
+    - Incluir las librerías Adafruit_GFX y Adafruit_SSD1306
+    - Crear el objeto display con ancho=128, alto=64
+    - Llamar a display.begin() con la dirección I2C (0x3C)
+    - Si falla → detener el programa (pantalla no conectada)
+
+  PASO 2 — Limpiar la pantalla
+    - Siempre llamar display.clearDisplay() antes de escribir
+    - Esto borra cualquier contenido previo en el buffer
+
+  PASO 3 — Configurar el texto
+    - display.setTextColor(SSD1306_WHITE) → letras blancas
+    - display.setTextSize(1) → tamaño pequeño (6x8 px por caracter)
+    - display.setTextSize(2) → tamaño mediano
+    - display.setTextSize(3) → tamaño grande (números BPM)
+
+  PASO 4 — Posicionar el cursor
+    - display.setCursor(x, y)
+    - x = posición horizontal (0 a 127)
+    - y = posición vertical   (0 a 63)
+    - El origen (0,0) está en la esquina superior izquierda
+
+  PASO 5 — Escribir el contenido
+    - display.println("texto")  → escribe y salta línea
+    - display.print("texto")    → escribe sin saltar línea
+    - display.print(variable)   → escribe el valor de una variable
+
+  PASO 6 — Dibujar figuras opcionales
+    - display.drawLine(x0,y0,x1,y1, color) → línea separadora
+    - display.drawRect(x,y,w,h, color)     → rectángulo vacío
+    - display.fillRect(x,y,w,h, color)     → rectángulo relleno
+    - display.fillCircle(x,y,r, color)     → círculo relleno
+
+  PASO 7 — Enviar el buffer a la pantalla
+    - display.display()
+    - SIN esta línea, nada aparece en la pantalla
+    - Todo lo anterior solo modifica el buffer en memoria
+
+EJEMPLO RESUMIDO:
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("Hola mundo");
+  display.display();  ← esto lo muestra en pantalla
+
+PANTALLAS EN EL PROYECTO:
+  1. Esperando dedo   → texto + ícono de corazón dibujado
+  2. Midiendo         → BPM grande (tamaño 3) + barra de progreso
+  3. Resultado        → promedio BPM + SpO2 + mínimo
+  4. Éxito / Error    → pantalla invertida (fondo blanco, texto negro)
+
+
+----------------------------------------------------------------
+PARTE 2 — SENSOR MAX30102 (Frecuencia Cardiaca + SpO2)
+----------------------------------------------------------------
+
+¿Qué es?
+  El MAX30102 es un sensor óptico que mide el ritmo cardiaco
+  y la saturación de oxígeno en sangre (SpO2). Usa dos LEDs
+  (rojo e infrarrojo) para iluminar el dedo y un fotodetector
+  para medir cuánta luz regresa. La sangre oxigenada absorbe
+  la luz de forma diferente a la no oxigenada, lo que permite
+  calcular ambos valores.
+  Se comunica con el ESP32 también por I2C.
+
+ALGORITMO DE USO:
+
+  PASO 1 — Inicializar el sensor
+    - Incluir librerías MAX30105, heartRate y spo2_algorithm
+    - Llamar a particleSensor.begin(Wire, I2C_SPEED_FAST)
+    - Si falla → detener el programa (sensor no conectado)
+
+  PASO 2 — Configurar parámetros del sensor
+    - particleSensor.setup(brillo, promedio, modo, frecuencia,
+                           anchoPulso, rangoADC)
+    - brillo=60      → intensidad LED (más alto = mejor señal)
+    - promedio=4     → cuántas muestras promediar internamente
+    - modo=2         → usar LED rojo + IR (necesario para SpO2)
+    - frecuencia=400 → muestras por segundo
+    - anchoPulso=411 → ancho del pulso del LED (máximo)
+    - rangoADC=4096  → rango del convertidor analógico-digital
+
+  PASO 3 — Detectar si hay un dedo
+    - Leer el valor IR: particleSensor.getIR()
+    - Si IR > 20000 → hay dedo presente
+    - Si IR < 20000 → no hay dedo (esperar)
+
+  PASO 4 — Llenar el buffer inicial (calibración)
+    - Llenar un arreglo de 100 muestras con valores IR y Rojo
+    - Esto permite a la librería tener suficientes datos
+      para hacer el primer cálculo de SpO2
+
+  PASO 5 — Detectar latidos (BPM)
+    - En cada muestra, llamar: checkForBeat(irValue)
+    - Si devuelve true → se detectó un latido
+    - Calcular el tiempo entre latidos (delta en milisegundos)
+    - Convertir a BPM: BPM = 60000 / delta
+    - Guardar los últimos 4 BPM en un arreglo circular
+    - Calcular el promedio de esos 4 valores = BPM mostrado
+    - Solo aceptar BPM entre 30 y 200 (rango fisiológico)
+
+  PASO 6 — Calcular SpO2
+    - Actualizar el buffer deslizante con cada nueva muestra:
+      redBuffer[99] = nuevo valor rojo
+      irBuffer[99]  = nuevo valor IR
+    - Cada 25 muestras, llamar a:
+      maxim_heart_rate_and_oxygen_saturation(...)
+    - Esta función devuelve:
+      spo2Value → porcentaje de saturación (ej: 98%)
+      spo2Valid → si el valor es confiable (1=sí, 0=no)
+      heartRate → BPM calculado por la librería (alternativo)
+
+  PASO 7 — Medir durante 60 segundos
+    - Registrar el tiempo de inicio: inicioMedicion = millis()
+    - Repetir pasos 5 y 6 hasta que millis() - inicioMedicion
+      sea mayor o igual a 60000 ms (60 segundos)
+    - Si el dedo se retira antes → reiniciar medición
+
+  PASO 8 — Guardar resultados finales
+    - BPM promedio = beatAvg (promedio de los últimos 4)
+    - BPM mínimo   = bpmMin (el menor registrado)
+    - BPM máximo   = bpmMax (el mayor registrado)
+    - SpO2         = spo2Value (si spo2Valid == 1)
+
+MÁQUINA DE ESTADOS DEL PROYECTO:
+
+  [ESPERANDO] ──dedo detectado──→ [MIDIENDO]
+      ↑                               │
+      │                         dedo retirado
+      │                               │
+      │                               ↓
+      │                          [ESPERANDO]
+      │
+  [MIDIENDO] ──60 segundos──→ [MOSTRANDO_RESULTADO]
+                                       │
+                                   4 segundos
+                                       │
+                                       ↓
+                                  [SUBIENDO/LOCAL]
+                                       │
+                                       ↓
+                                  [ESPERANDO]
+
+
+----------------------------------------------------------------
+PARTE 3 — PÁGINA WEB (HTML + CSS + JavaScript)
+----------------------------------------------------------------
+
+¿Cómo funciona?
+  El ESP32 en modo Access Point crea su propia red WiFi.
+  El usuario se conecta a esa red y abre un navegador.
+  El ESP32 tiene un servidor web que responde con la
+  página HTML cuando alguien entra a 192.168.4.1
+
+ALGORITMO DEL SERVIDOR WEB (en el ESP32):
+
+  PASO 1 — Crear el servidor
+    - WebServer server(80) → escuchar en el puerto 80 (HTTP)
+
+  PASO 2 — Registrar rutas
+    - server.on("/",      handleRoot)  → página principal
+    - server.on("/datos", handleDatos) → datos en formato JSON
+
+  PASO 3 — Ruta "/" — entregar la página HTML
+    - Tomar la cadena INDEX_HTML (guardada en Flash/PROGMEM)
+    - Reemplazar el marcador %IP% con la IP real del ESP32
+    - Enviar como respuesta con tipo "text/html"
+
+  PASO 4 — Ruta "/datos" — entregar datos en JSON
+    - Construir un objeto JSON con:
+        bpm        → último BPM promedio de la medición
+        bpm_actual → BPM del latido más reciente (tiempo real)
+        spo2       → saturación de oxígeno
+        bpm_min    → BPM mínimo registrado
+        bpm_max    → BPM máximo registrado
+        fecha      → tiempo desde encendido (HH:MM:SS)
+        estado     → número del estado actual (0,1,2,3)
+        hay_datos  → si ya hay al menos una medición completa
+    - Enviar como respuesta con tipo "application/json"
+
+  PASO 5 — Atender peticiones en el loop
+    - En cada ciclo del loop() llamar: server.handleClient()
+    - Esto permite que el ESP32 responda a peticiones web
+      mientras sigue midiendo el sensor
+
+ALGORITMO DE LA PÁGINA WEB (en el navegador):
+
+  PASO 1 — Carga inicial
+    - El navegador recibe el HTML del ESP32
+    - Se renderizan los estilos CSS (colores, fuentes, layout)
+    - Se ejecuta el JavaScript
+
+  PASO 2 — Primera petición de datos
+    - Al cargar, JavaScript llama a fetchDatos()
+    - fetch("/datos") hace una petición HTTP GET al ESP32
+    - El ESP32 responde con el JSON de los datos actuales
+
+  PASO 3 — Mostrar los datos
+    - Si hay_datos == false → mostrar mensaje de espera
+    - Si hay_datos == true  → mostrar tarjetas con BPM y SpO2
+    - Actualizar el estado en la barra superior
+    - Agregar el bpm_actual a la historia de la gráfica
+
+  PASO 4 — Dibujar la gráfica (Canvas API)
+    - La gráfica usa el elemento <canvas> de HTML5
+    - Se guarda un historial de los últimos 40 valores de BPM
+    - En cada actualización se redibujan:
+        a) Fondo oscuro del canvas
+        b) Líneas de cuadrícula con etiquetas de valores
+        c) Área degradada bajo la curva (relleno azul)
+        d) Línea principal de la curva (azul brillante)
+        e) Punto animado en el último valor
+        f) Etiqueta con el BPM actual junto al punto
+
+  PASO 5 — Actualización automática cada 1.5 segundos
+    - Un temporizador corre cada 100 ms (TICK)
+    - Acumula tiempo hasta llegar a 1500 ms
+    - Muestra cuenta regresiva: "Refresh en 1.4s", "1.3s"...
+    - Al llegar a 0 → llama a fetchDatos() de nuevo
+    - Ciclo infinito mientras la página esté abierta
+
+  PASO 6 — Indicador de estado
+    - El estado del ESP32 se muestra en texto:
+        0 → "ESPERANDO DEDO"
+        1 → "MIDIENDO..."
+        2 → "MOSTRANDO RESULTADO"
+        3 → "SUBIENDO / LOCAL"
+    - El punto verde parpadea siempre (animación CSS)
+
+FLUJO COMPLETO DE COMUNICACIÓN:
+
+  [Navegador]  ──GET /──────────────→  [ESP32]
+  [Navegador]  ←─────── HTML ────────  [ESP32]
+
+  cada 1.5s:
+  [Navegador]  ──GET /datos──────────→  [ESP32]
+  [Navegador]  ←─────── JSON ─────────  [ESP32]
+  [Navegador]  → actualiza gráfica y tarjetas
+
+
+----------------------------------------------------------------
+RESUMEN GENERAL DEL SISTEMA
+----------------------------------------------------------------
+
+  1. El ESP32 arranca y crea la red WiFi "Monitor-Cardiaco"
+  2. Inicializa la pantalla OLED y muestra mensajes de estado
+  3. Inicializa el sensor MAX30102 con alta sensibilidad
+  4. Pide al usuario que coloque el dedo para calibrar
+  5. Llena el buffer de 100 muestras para SpO2
+  6. Espera a que el usuario coloque el dedo de nuevo
+  7. Al detectar el dedo, inicia la medición de 60 segundos
+  8. Durante la medición:
+       - Detecta latidos y calcula BPM en tiempo real
+       - Calcula SpO2 cada 25 muestras
+       - Actualiza la pantalla OLED cada 100 ms
+       - Atiende peticiones web en paralelo
+       - Expone bpm_actual para la gráfica en vivo
+  9. Al terminar los 60 segundos, muestra el resultado
+ 10. Guarda los datos para que la web los muestre
+ 11. Vuelve al estado de espera para nueva medición
+
+  En cualquier momento, el usuario puede abrir un navegador
+  conectado a la red del ESP32 y ver la página web con la
+  gráfica en tiempo real y los resultados de la última
+  medición.
+
+================================================================
+  FIN DEL DOCUMENTO
+================================================================
