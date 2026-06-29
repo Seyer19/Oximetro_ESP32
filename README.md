@@ -1,4 +1,4 @@
-# 📡 Monitor Cardiaco IoT — ESP32 + MAX30102
+# Monitor Cardiaco IoT — ESP32 + MAX30102
 
 Dispositivo IoT portátil para medir frecuencia cardiaca (BPM) y saturación de oxígeno (SpO2), con visualización en tiempo real mediante una interfaz web servida directamente desde el ESP32 en modo Access Point — sin necesidad de internet ni router.
 
