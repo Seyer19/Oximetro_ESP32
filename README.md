@@ -6,7 +6,7 @@ Proyecto final de la materia **Organización de Computadoras** — Ingeniería e
 
 ---
 
-## 📑 Tabla de contenidos
+##  Tabla de contenidos
 
 - [Características](#-características)
 - [Hardware utilizado](#-hardware-utilizado)
@@ -21,19 +21,19 @@ Proyecto final de la materia **Organización de Computadoras** — Ingeniería e
 
 ---
 
-## ✨ Características
+## Características
 
-- 🔋 **Totalmente portátil** — alimentado por batería LiPo recargable vía USB-C
-- 📶 **Access Point propio** — el ESP32 crea su propia red WiFi, no requiere internet
-- 📊 **Gráfica en tiempo real** del BPM directamente en el navegador (Canvas API)
-- 🔄 **Refresco cada 1.5 segundos** vía polling JSON
-- 🖥️ **Pantalla OLED** con estado del sistema y resultados en vivo
-- ❤️ **Sensor óptico de alta sensibilidad** ajustado para detección confiable de pulso
-- 🌐 **Interfaz web responsiva** sin frameworks externos (HTML + CSS + JS puro)
+- **Totalmente portátil** — alimentado por batería LiPo recargable vía USB-C
+- **Access Point propio** — el ESP32 crea su propia red WiFi, no requiere internet
+- **Gráfica en tiempo real** del BPM directamente en el navegador (Canvas API)
+- **Refresco cada 1.5 segundos** vía polling JSON
+- **Pantalla OLED** con estado del sistema y resultados en vivo
+- **Sensor óptico de alta sensibilidad** ajustado para detección confiable de pulso
+- **Interfaz web responsiva** sin frameworks externos (HTML + CSS + JS puro)
 
 ---
 
-## 🔧 Hardware utilizado
+##  Hardware utilizado
 
 | Componente | Modelo | Función |
 |---|---|---|
@@ -47,13 +47,13 @@ Proyecto final de la materia **Organización de Computadoras** — Ingeniería e
 
 ---
 
-## 🔌 Diagrama de conexiones
+##  Diagrama de conexiones
 
 ### ESP32 ↔ OLED ↔ MAX30102 (bus I2C compartido)
 
 ![Diagrama ESP32, OLED y MAX30102](docs/diagramas/diagrama1_esp32_oled_max30102.png)
 
-> ⚠️ **Importante:** el OLED y el MAX30102 comparten el mismo bus I2C. Ambos se conectan a los **mismos** pines `GPIO 21 (SDA)` y `GPIO 22 (SCL)` del ESP32 — esto es el comportamiento normal del protocolo I2C, que permite múltiples dispositivos en un solo bus de 2 cables.
+>  **Importante:** el OLED y el MAX30102 comparten el mismo bus I2C. Ambos se conectan a los **mismos** pines `GPIO 21 (SDA)` y `GPIO 22 (SCL)` del ESP32 — esto es el comportamiento normal del protocolo I2C, que permite múltiples dispositivos en un solo bus de 2 cables.
 
 | Señal | Pin ESP32 | Significado |
 |---|---|---|
@@ -70,7 +70,7 @@ Batería LiPo → TP4056 (carga) → Switch → MT3608 (boost a 5V) → ESP32 (V
 
 ---
 
-## 📁 Estructura del repositorio
+##  Estructura del repositorio
 
 ```
 MonitorCardiaco-ESP32/
@@ -91,7 +91,7 @@ MonitorCardiaco-ESP32/
 
 ---
 
-## ⚙️ Instalación
+##  Instalación
 
 ### Requisitos
 
@@ -123,7 +123,7 @@ Instalar desde el Library Manager del Arduino IDE:
 
 ---
 
-## ▶️ Uso
+##  Uso
 
 1. Al encender, el ESP32 crea una red WiFi llamada **`Monitor-Cardiaco`**
 2. Conéctate a esa red desde tu celular o computadora:
@@ -138,7 +138,7 @@ Instalar desde el Library Manager del Arduino IDE:
 
 ---
 
-## 🧠 Cómo funciona
+##  Cómo funciona
 
 El proyecto se organiza en tres bloques principales, documentados en detalle en `docs/`:
 
@@ -158,7 +158,7 @@ Para una explicación completa paso a paso, revisa:
 
 ---
 
-## 📚 Documentación adicional
+##  Documentación adicional
 
 | Archivo | Contenido |
 |---|---|
@@ -167,13 +167,9 @@ Para una explicación completa paso a paso, revisa:
 
 ---
 
-## 👤 Autor
+##  Autor
 
 **Arath Reyes Gonzalez**
-Ingeniería en Desarrollo de Software — UABC FCITEC
-Organización de Computadoras — Grupo 534
-Profesor: M.C. José Manuel Muñóz Contreras
-
 ---
 
 ## 📄 Licencia
