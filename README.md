@@ -2,8 +2,6 @@
 
 Dispositivo IoT portátil para medir frecuencia cardiaca (BPM) y saturación de oxígeno (SpO2), con visualización en tiempo real mediante una interfaz web servida directamente desde el ESP32 en modo Access Point — sin necesidad de internet ni router.
 
-Proyecto final de la materia **Organización de Computadoras** — Ingeniería en Desarrollo de Software, UABC FCITEC, Grupo 534.
-
 ---
 
 ##  Tabla de contenidos
