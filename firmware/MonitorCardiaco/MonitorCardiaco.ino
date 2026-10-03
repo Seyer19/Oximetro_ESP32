@@ -9,7 +9,7 @@
 #include <spo2_algorithm.h>
 #include "webpage.h"
 
-// ── Configuración Access Point ──────────────────────────
+// ── Configuracion Access Point ──────────────────────────
 const char* AP_SSID     = "Monitor-Cardiaco";   // nombre de la red WiFi que crea el ESP32
 const char* AP_PASSWORD = "12345678";            // contraseña (mínimo 8 caracteres)
 // IP fija del ESP32 en modo AP: 192.168.4.1
@@ -34,7 +34,7 @@ int32_t  heartRate;
 int8_t   hrValid;
 
 // ── Variables BPM ───────────────────────────────────────
-// CAMBIO: RATE_SIZE aumentado de 4 a 8 para promedio más estable pero detección más rápida
+// CAMBIO: RATE_SIZE aumentado de 4 a 8 para promedio más estable pero detección mas rapida
 const byte RATE_SIZE = 4;
 byte   rates[RATE_SIZE];
 byte   rateSpot  = 0;
@@ -44,7 +44,7 @@ int    beatAvg   = 0;
 int    bpmMin    = 999;
 int    bpmMax    = 0;
 
-// ── Estado de medición ──────────────────────────────────
+// ── Estado de medicion ──────────────────────────────────
 enum Estado { ESPERANDO, MIDIENDO, MOSTRANDO_RESULTADO, SUBIENDO };
 Estado estadoActual = ESPERANDO;
 
@@ -56,7 +56,7 @@ const long DISPLAY_INTERVAL   = 100;
 bool   wifiOk    = false;
 String ipAddress = "";
 
-// ── Última medición para la web ─────────────────────────
+// ── Última medicion para la web ─────────────────────────
 int    ultimoBPM    = 0;
 int    ultimoMin    = 0;
 int    ultimoMax    = 0;
@@ -88,7 +88,7 @@ void handleRoot() {
 void handleDatos() {
   StaticJsonDocument<300> doc;
   doc["bpm"]        = ultimoBPM;
-  doc["bpm_actual"] = bpmActual;   // BPM en tiempo real para la gráfica
+  doc["bpm_actual"] = bpmActual;   // BPM en tiempo real para la grafica
   doc["spo2"]       = ultimoSpO2;
   doc["bpm_min"]    = ultimoMin;
   doc["bpm_max"]    = ultimoMax;
@@ -147,14 +147,14 @@ void setup() {
   }
   Serial.println("MAX30102 OK");
 
-  // ── CONFIGURACIÓN MÁS SENSIBLE ──────────────────────
+  // ── CONFIGURACION MAS SENSIBLE ──────────────────────
   // setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange)
-  // ledBrightness: 60  → más brillo = mejor penetración del dedo
-  // sampleAverage: 4   → menos promedio = más sensible a cambios rápidos
-  // ledMode:       2   → rojo + IR (necesario para SpO2)
-  // sampleRate:    400 → más muestras por segundo = detecta latidos mejor
-  // pulseWidth:    411 → máximo ancho de pulso = mejor señal
-  // adcRange:      4096→ rango máximo ADC
+  // ledBrightness: 60  -> más brillo = mejor penetración del dedo
+  // sampleAverage: 4   -> menos promedio = más sensible a cambios rápidos
+  // ledMode:       2   -> rojo + IR (necesario para SpO2)
+  // sampleRate:    400 -> más muestras por segundo = detecta latidos mejor
+  // pulseWidth:    411 -> máximo ancho de pulso = mejor señal
+  // adcRange:      4096 -> rango máximo ADC
   particleSensor.setup(60, 4, 2, 400, 411, 4096);
   particleSensor.setPulseAmplitudeRed(0x1F);   // amplitud LED rojo media-alta
   particleSensor.setPulseAmplitudeIR(0x1F);    // amplitud LED IR  media-alta
@@ -166,7 +166,7 @@ void setup() {
   estadoActual = ESPERANDO;
 }
 
-// ── Calibración con dedo ────────────────────────────────
+// ── CalibraciOn con dedo ────────────────────────────────
 void calibrarSensor() {
   pantalla("Pon el dedo", "en el sensor", "para calibrar", false);
   Serial.println("Esperando dedo para calibrar...");
@@ -212,7 +212,7 @@ void loop() {
     particleSensor.check();
 
   long irValue = particleSensor.getIR();
-  // CAMBIO: umbral inferior bajado de 30000 a 20000 → detecta dedos más fácil
+  // CAMBIO: umbral inferior bajado de 30000 a 20000 → detecta dedos mas fácil
   bool dedoPresente = (irValue > 20000 && irValue < 200000);
 
   switch (estadoActual) {
@@ -253,11 +253,11 @@ void loop() {
         lastBeat = millis();
 
         // CAMBIO: rango ampliado de 300-1500 ms a 250-1800 ms
-        // → detecta pulsos más rápidos (hasta 240 BPM) y más lentos (hasta 33 BPM)
+        // detecta pulsos más rapidos (hasta 240 BPM) y mas lentos (hasta 33 BPM)
         if (delta > 250 && delta < 1800) {
           beatsPerMinute = 60.0 / (delta / 1000.0);
 
-          // CAMBIO: rango de BPM válido ampliado de 40-180 a 30-200
+          // CAMBIO: rango de BPM valido ampliado de 40-180 a 30-200
           if (beatsPerMinute > 30 && beatsPerMinute < 200) {
             bpmActual = (int)beatsPerMinute;   // actualiza tiempo real
 
@@ -427,7 +427,7 @@ void mostrarResultado() {
   display.display();
 }
 
-// ── Pantalla: éxito ─────────────────────────────────────
+// ── Pantalla: exito ─────────────────────────────────────
 void mostrarExito() {
   display.clearDisplay();
   display.fillRect(0, 0, 128, 64, SSD1306_WHITE);
@@ -456,12 +456,12 @@ void mostrarExito() {
 
 // En modo Access Point no hay internet, los datos solo se ven en la web local
 bool subirDatos(int promedio, int spo2) {
-  // Sin internet en modo AP — función deshabilitada
+  // Sin internet en modo AP — funcion deshabilitada
   Serial.println("Modo AP: datos no se suben a Sheets (sin internet)");
   return false;
 }
 
-// ── Pantalla genérica ───────────────────────────────────
+// ── Pantalla generica ───────────────────────────────────
 void pantalla(const char* l1, const char* l2,
               const char* l3, bool invertir) {
   display.clearDisplay();
